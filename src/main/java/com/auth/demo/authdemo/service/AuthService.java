@@ -45,6 +45,8 @@ public class AuthService {
     private String clientSecret;
     @Value("${app.authCallback}")
     private String callbackUrl;
+    @Value("${app.kid}")
+    private String kid;
 
 
     public AuthService() {
@@ -55,6 +57,7 @@ public class AuthService {
     @PostConstruct
     private void initWellKnownConfigs() {
         try {
+            // Load well known configs
             logger.info("Fetching token");
             Request request = new Request.Builder().url(this.getOpenIdConfigUrl()).build();
             Response response = client.newCall(request).execute();
@@ -129,6 +132,8 @@ public class AuthService {
     }
 
     public String getAccessToken(String code) {
+        // Once authenticated by SSO, gonna fetch the
+        // authentication object by providing authorization code
         RequestBody body = new FormBody.Builder()
                 .add("code", code)
                 .add("grant_type", "authorization_code")
@@ -136,12 +141,17 @@ public class AuthService {
                 .add("client_id", this.clientId)
                 .add("client_secret", this.clientSecret)
                 .build();
+        // Build request
         Request request = new Request.Builder().url(this.getTokenEndpoint()).post(body).build();
         Response response = null;
         try {
+            // Exec HTTP GET
             response = client.newCall(request).execute();
+            // Parse response into JsonObject
             JsonObject authRes = parser.parse(response.body().string()).getAsJsonObject();
+            // Store token to in memory for further logout action
             tokenStorageService.addToken(authRes);
+            // Return access token
             return authRes.get("access_token").getAsString();
         } catch (IOException e) {
             e.printStackTrace();
@@ -151,11 +161,17 @@ public class AuthService {
 
     public JsonObject validateAndDecodeToken(String accessToken) {
         try {
+            // Validate and decode token by loading public key int JWK
             JwkProvider provider = new UrlJwkProvider(new URL(this.getJwksUri()));
-            Jwk jwk = provider.get("tGZcCigDaBf10m3-f-A0MSuD1VaO3q4bJb8EpWrtLkw");
+            // Find the keys by kid
+            Jwk jwk = provider.get(this.kid);
+            // Load keys
             Algorithm algorithm = Algorithm.RSA256((RSAPublicKey) jwk.getPublicKey(), null);
+            // Create verifier object
             JWTVerifier verifier = JWT.require(algorithm).build();
+            // Decode and verify token
             DecodedJWT jwt = verifier.verify(accessToken);
+            // Extract all data from the token payload and send it to client
             Map<String, Claim> claims = jwt.getClaims();
             JsonObject jo = new JsonObject();
             jo.addProperty("algorithm", jwt.getAlgorithm());
@@ -191,8 +207,8 @@ public class AuthService {
     }
 
     public JsonObject getUserInfo(String accessToken) {
+        // Get user info by access token
         HttpUrl.Builder httpUrlBuilder = HttpUrl.parse(this.getUserInfoEndpoint()).newBuilder();
-
         Request request = new Request.Builder()
                 .url(httpUrlBuilder.build())
                 .header("Authorization", String.format("Bearer %s", accessToken))
@@ -209,6 +225,8 @@ public class AuthService {
     }
 
     public String logout(String accessToken) {
+        // Build logout url, get refresh_token from
+        // in memory HashMap by accessToken key
         RequestBody body = new FormBody.Builder()
                 .add("client_id", this.getClientId())
                 .add("client_secret", this.getClientSecret())
