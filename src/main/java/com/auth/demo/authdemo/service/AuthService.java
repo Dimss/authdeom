@@ -9,13 +9,12 @@ import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.Claim;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import com.auth0.jwt.interfaces.RSAKeyProvider;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.google.gson.JsonParser;
@@ -24,21 +23,20 @@ import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.HashMap;
 import java.util.Map;
 
 
 @Service
-public class RealmConfig {
-    Logger logger = LoggerFactory.getLogger(RealmConfig.class);
+public class AuthService {
+    Logger logger = LoggerFactory.getLogger(AuthService.class);
     private OkHttpClient client;
     private JsonParser parser;
     private JsonObject wellKnownConfigs;
-    private String openIdConfigUrl;
+    @Autowired
+    private TokenStorageService tokenStorageService;
     @Value("${app.ssoBaseUrl}")
-    private String ssoBaseUrl;// = "http://sso-sso.apps.dev.ocp.lab/auth/realms/BNHP-DEV/.well-known/openid-configuration";
+    private String ssoBaseUrl;
     @Value("${app.realmName}")
     private String realmName;
     @Value("${app.clientId}")
@@ -49,7 +47,7 @@ public class RealmConfig {
     private String callbackUrl;
 
 
-    public RealmConfig() {
+    public AuthService() {
         this.client = new OkHttpClient();
         this.parser = new JsonParser();
     }
@@ -97,6 +95,10 @@ public class RealmConfig {
         return this.wellKnownConfigs.get("userinfo_endpoint").getAsString();
     }
 
+    public String getEndSessionEndpoint() {
+        return this.wellKnownConfigs.get("end_session_endpoint").getAsString();
+    }
+
     public String getJwksUri() {
         return this.wellKnownConfigs.get("jwks_uri").getAsString();
     }
@@ -138,7 +140,9 @@ public class RealmConfig {
         Response response = null;
         try {
             response = client.newCall(request).execute();
-            return parser.parse(response.body().string()).getAsJsonObject().get("access_token").getAsString();
+            JsonObject authRes = parser.parse(response.body().string()).getAsJsonObject();
+            tokenStorageService.addToken(authRes);
+            return authRes.get("access_token").getAsString();
         } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException();
@@ -151,10 +155,8 @@ public class RealmConfig {
             Jwk jwk = provider.get("tGZcCigDaBf10m3-f-A0MSuD1VaO3q4bJb8EpWrtLkw");
             Algorithm algorithm = Algorithm.RSA256((RSAPublicKey) jwk.getPublicKey(), null);
             JWTVerifier verifier = JWT.require(algorithm).build();
-
             DecodedJWT jwt = verifier.verify(accessToken);
-            Map<String, Claim> claims = jwt.getClaims();    //Key is the Claim name
-
+            Map<String, Claim> claims = jwt.getClaims();
             JsonObject jo = new JsonObject();
             jo.addProperty("algorithm", jwt.getAlgorithm());
             jo.addProperty("type", jwt.getType());
@@ -162,7 +164,6 @@ public class RealmConfig {
             jo.addProperty("subject", jwt.getSubject());
             jo.addProperty("expiresAt", jwt.getExpiresAt().toString());
             jo.addProperty("issuedAt", jwt.getIssuedAt().toString());
-
             claims.forEach((k, v) -> {
                 // WTF?!
                 try {
@@ -175,14 +176,11 @@ public class RealmConfig {
                         try {
                             jo.addProperty(k, v.asBoolean().toString());
                         } catch (Exception ex) {
-                            logger.info(String.format("Error on key: %s", k));
                             jo.addProperty(k, v.asString());
                         }
                     }
                 }
             });
-
-
             return jo;
         } catch (JwkException e) {
             e.printStackTrace();
@@ -204,6 +202,22 @@ public class RealmConfig {
             response = client.newCall(request).execute();
             JsonObject jo = parser.parse(response.body().string()).getAsJsonObject();
             return jo;
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
+    }
+
+    public String logout(String accessToken) {
+        RequestBody body = new FormBody.Builder()
+                .add("client_id", this.getClientId())
+                .add("client_secret", this.getClientSecret())
+                .add("refresh_token", tokenStorageService.getToken(accessToken).get("refresh_token").getAsString())
+                .build();
+        Request request = new Request.Builder().url(this.getEndSessionEndpoint()).post(body).build();
+        try {
+            client.newCall(request).execute();
+            return "ok";
         } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException();

@@ -2,27 +2,40 @@ $(document).ready(function () {
 
     let accessToken = getUrlParameter("access_token");
     if (accessToken) {
-        console.log(`http://127.0.0.1:8080/v1/validate?access_token=${accessToken}`)
         fetch(`/v1/validate?access_token=${accessToken}`)
             .then((response) => {
-            return response.json();
-    }).
-        then((data) => {
-            Object.keys(data).forEach((key) => {
-                // if (key === 'claims'){
-                //     Object.keys(data[key]).forEach((claimKey)=>{
-                //         addTokenData("#tokenDetails",claimKey, data[key][claimKey])
-                //     })
-                // }
-                // else{
-                    addTokenData("#tokenDetails",key, data[key])
-                // }
+                return response.json();
+            })
+            .then((data) => {
+                Object.keys(data).forEach((key) => {
+                    addTokenData("#tokenDetails",key, data[key]);
+                });
             });
-        });
+        fetch(`/v1/user?access_token=${accessToken}`)
+            .then((response) => {
+                return response.json();
+            })
+            .then((data) => {
+                Object.keys(data).forEach((key) => {
+                    addTokenData("#userDetails",key, data[key]);
+                });
+            });
     }
 
     $("#loginBtn").on("click", function () {
         window.location.href = "/v1/auth";
+    });
+
+
+    $("#logoutBtn").on("click", function () {
+        if (accessToken){
+            fetch(`/v1/logout?access_token=${accessToken}`, {method:'DELETE'})
+                .then((response) => {
+                    if (response.status === 200){
+                        window.location.href = "/index.html";
+                    }
+                });
+        }
     });
 });
 
