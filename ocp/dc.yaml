@@ -52,10 +52,10 @@ spec:
           value: "APPLICATION SECRET"
         - name: APP_AUTH_CALLBACK
           value: "http://REPLACE_WITH_APP_URL/v1/oauth2callback"
-        - name: APP_KID
+        - name: APP_KID # Get KID from http://SSO_URL/auth/realms/RELM_NAME/protocol/openid-connect/certs
           value: "KID FROM WHELL KWNON URL"
         - name: SPRING_PROFILES_ACTIVE
           value: "prod"
         ports:
         - containerPort: 8080
-http://SSO_URL/auth/realms/RELM_NAME/protocol/openid-connect/certs
+
