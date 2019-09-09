@@ -58,3 +58,4 @@ spec:
           value: "prod"
         ports:
         - containerPort: 8080
+http://SSO_URL/auth/realms/RELM_NAME/protocol/openid-connect/certs
