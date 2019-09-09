@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: authdemo
+spec:
+  selector:
+    app: authdemo
+  ports:
+  - name: http
+    port: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    application: authdemo
+  name: authdemo
+spec:
+  host: authdemo.devcloudapps.poalim.bank
+  to:
+    kind: Service
+    name: authdemo
+    weight: 100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authdemo
+  labels:
+    app: authdemo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authdemo
+  template:
+    metadata:
+      labels:
+        app: authdemo
+    spec:
+      containers:
+      - name: authdemo
+        image: docker.io/dimssss/authdemo:0.1
+        env:
+        - name: APP_SSO_BASE_URL
+          value: "http://sso.url."
+        - name: APP_REALM_NAME
+          value: "RELM-NMAE"
+        - name: APP_CLIENT_ID
+          value: "APPLICATION ID"
+        - name: APP_CLIENT_SECRET
+          value: "APPLICATION SECRET"
+        - name: APP_AUTH_CALLBACK
+          value: "http://REPLACE_WITH_APP_URL/v1/oauth2callback"
+        - name: APP_KID
+          value: "KID FROM WHELL KWNON URL"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
+        ports:
+        - containerPort: 8080
