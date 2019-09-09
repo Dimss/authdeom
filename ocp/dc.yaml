@@ -16,7 +16,7 @@ metadata:
     application: authdemo
   name: authdemo
 spec:
-  host: authdemo.devcloudapps.poalim.bank
+  host: ROUTER_URL
   to:
     kind: Service
     name: authdemo
